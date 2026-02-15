@@ -1,0 +1,71 @@
+name: android-build-from-private
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Private source ref/branch/commit"
+        required: true
+        default: "main"
+      artifact_name:
+        description: "Artifact name"
+        required: true
+        default: "a-class-edge-apk"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout workflow repo
+        uses: actions/checkout@v4
+
+      - name: Setup SSH for private source clone
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SOURCE_REPO_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      - name: Clone private source repository
+        shell: bash
+        env:
+          SOURCE_REPO: FuChuZhao/a-class-edge-source
+          SOURCE_REF: ${{ github.event.inputs.source_ref }}
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$SOURCE_REF" "git@github.com:${SOURCE_REPO}.git" source
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.10.2
+
+      - name: Build APK from private script
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd source
+          chmod +x tool/ci/build_apk.sh
+          tool/ci/build_apk.sh
+
+      - name: Upload artifact (minimal retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.artifact_name }}
+          path: source/out/apk/*.apk
+          if-no-files-found: error
+          retention-days: 1
