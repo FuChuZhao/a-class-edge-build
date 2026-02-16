@@ -19,6 +19,14 @@ on:
         description: "Benchmark samples per class"
         required: true
         default: "100"
+      run_mlkit_benchmark:
+        description: "Run MLKit runtime benchmark on Android emulator"
+        required: true
+        default: "true"
+      mlkit_max_samples:
+        description: "Max samples for MLKit emulator benchmark (0=all)"
+        required: true
+        default: "700"
 
 permissions:
   contents: read
@@ -71,7 +79,7 @@ jobs:
           tool/ci/build_apk.sh
 
       - name: Setup Python
-        if: ${{ github.event.inputs.run_benchmark == 'true' }}
+        if: ${{ github.event.inputs.run_benchmark == 'true' || github.event.inputs.run_mlkit_benchmark == 'true' }}
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -81,12 +89,58 @@ jobs:
         shell: bash
         env:
           BENCHMARK_PER_CLASS: ${{ github.event.inputs.benchmark_per_class }}
+          RUN_MLKIT_BENCHMARK: ${{ github.event.inputs.run_mlkit_benchmark }}
         run: |
           set -euo pipefail
           python3 -m pip install --disable-pip-version-check --no-python-version-warning Pillow
           cd source
           chmod +x tool/benchmark/build_hf_benchmark_v1.sh tool/benchmark/run_benchmark_eval.sh
-          tool/benchmark/run_benchmark_eval.sh --per-class "$BENCHMARK_PER_CLASS" --out-dir out/benchmark
+          KEEP_IMAGES_ARG=""
+          if [[ "$RUN_MLKIT_BENCHMARK" == "true" ]]; then
+            KEEP_IMAGES_ARG="--keep-images"
+          fi
+          tool/benchmark/run_benchmark_eval.sh --per-class "$BENCHMARK_PER_CLASS" --out-dir out/benchmark $KEEP_IMAGES_ARG
+
+      - name: Run MLKit benchmark on emulator
+        if: ${{ github.event.inputs.run_mlkit_benchmark == 'true' }}
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          BENCHMARK_PER_CLASS: ${{ github.event.inputs.benchmark_per_class }}
+          RUN_BENCHMARK: ${{ github.event.inputs.run_benchmark }}
+          MLKIT_MAX_SAMPLES: ${{ github.event.inputs.mlkit_max_samples }}
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -euo pipefail
+            cd source
+            chmod +x tool/benchmark/build_hf_benchmark_v1.sh
+
+            if [[ "$RUN_BENCHMARK" != "true" ]]; then
+              tool/benchmark/build_hf_benchmark_v1.sh --download --per-class "$BENCHMARK_PER_CLASS" --out-dir out/benchmark
+            fi
+
+            python3 tool/benchmark/build_mlkit_eval_manifest.py \
+              --benchmark-manifest out/benchmark/benchmark_manifest.csv \
+              --output out/benchmark/mlkit_eval_manifest.json \
+              --max-samples "$MLKIT_MAX_SAMPLES"
+
+            DEVICE_ROOT="/sdcard/Android/data/com.okret.aclassedge.debug/files/okret_benchmark"
+            adb shell "rm -rf $DEVICE_ROOT && mkdir -p $DEVICE_ROOT"
+            adb push out/benchmark/images "$DEVICE_ROOT/images"
+            adb push out/benchmark/mlkit_eval_manifest.json "$DEVICE_ROOT/mlkit_eval_manifest.json"
+
+            ./gradlew --no-daemon :app:connectedDebugAndroidTest \
+              -Pandroid.testInstrumentationRunnerArguments.class=com.okret.aclassedge.benchmark.MlKitRouterBenchmarkInstrumentedTest \
+              -Pandroid.testInstrumentationRunnerArguments.okretBenchmarkManifest="$DEVICE_ROOT/mlkit_eval_manifest.json" \
+              -Pandroid.testInstrumentationRunnerArguments.okretBenchmarkImagesRoot="$DEVICE_ROOT" \
+              -Pandroid.testInstrumentationRunnerArguments.okretBenchmarkOutDir="$DEVICE_ROOT/out"
+
+            mkdir -p out/mlkit-benchmark
+            adb pull "$DEVICE_ROOT/out" out/mlkit-benchmark/device || true
 
       - name: Upload artifact (minimal retention)
         uses: actions/upload-artifact@v4
@@ -112,5 +166,18 @@ jobs:
           path: |
             source/out/benchmark/benchmark_manifest.csv
             source/out/benchmark/eval/**
+          if-no-files-found: warn
+          retention-days: 1
+
+      - name: Upload MLKit benchmark report
+        if: ${{ always() && github.event.inputs.run_mlkit_benchmark == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: a-class-edge-mlkit-benchmark-report
+          path: |
+            source/out/benchmark/mlkit_eval_manifest.json
+            source/out/mlkit-benchmark/**
+            source/app/build/reports/androidTests/connected/**
+            source/app/build/outputs/androidTest-results/connected/**
           if-no-files-found: warn
           retention-days: 1
