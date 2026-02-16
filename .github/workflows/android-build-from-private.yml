@@ -124,7 +124,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-snapshot -noaudio -no-boot-anim -no-window
           script: |
-            set -euo pipefail
+            set -eu
             cd source
             chmod +x tool/benchmark/build_hf_benchmark_v1.sh
 
