@@ -11,6 +11,14 @@ on:
         description: "Artifact name"
         required: true
         default: "a-class-edge-apk"
+      run_benchmark:
+        description: "Run 7-class benchmark evaluation"
+        required: true
+        default: "true"
+      benchmark_per_class:
+        description: "Benchmark samples per class"
+        required: true
+        default: "100"
 
 permissions:
   contents: read
@@ -62,6 +70,24 @@ jobs:
           chmod +x tool/ci/build_apk.sh
           tool/ci/build_apk.sh
 
+      - name: Setup Python
+        if: ${{ github.event.inputs.run_benchmark == 'true' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run benchmark evaluation
+        if: ${{ github.event.inputs.run_benchmark == 'true' }}
+        shell: bash
+        env:
+          BENCHMARK_PER_CLASS: ${{ github.event.inputs.benchmark_per_class }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --no-python-version-warning Pillow
+          cd source
+          chmod +x tool/benchmark/build_hf_benchmark_v1.sh tool/benchmark/run_benchmark_eval.sh
+          tool/benchmark/run_benchmark_eval.sh --per-class "$BENCHMARK_PER_CLASS" --out-dir out/benchmark
+
       - name: Upload artifact (minimal retention)
         uses: actions/upload-artifact@v4
         with:
@@ -75,5 +101,16 @@ jobs:
         with:
           name: a-class-edge-unit-test-report
           path: source/out/test-report/**
+          if-no-files-found: warn
+          retention-days: 1
+
+      - name: Upload benchmark report
+        if: ${{ github.event.inputs.run_benchmark == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: a-class-edge-benchmark-report
+          path: |
+            source/out/benchmark/benchmark_manifest.csv
+            source/out/benchmark/eval/**
           if-no-files-found: warn
           retention-days: 1
