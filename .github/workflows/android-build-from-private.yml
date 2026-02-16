@@ -69,3 +69,11 @@ jobs:
           path: source/out/apk/*.apk
           if-no-files-found: error
           retention-days: 1
+
+      - name: Upload unit test report
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: source/out/test-report/**
+          if-no-files-found: warn
+          retention-days: 1
