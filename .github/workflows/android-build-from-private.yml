@@ -109,9 +109,10 @@ jobs:
           RUN_BENCHMARK: ${{ github.event.inputs.run_benchmark }}
           MLKIT_MAX_SAMPLES: ${{ github.event.inputs.mlkit_max_samples }}
         with:
-          api-level: 30
-          arch: x86_64
-          profile: pixel_6
+          api-level: 29
+          arch: x86
+          profile: Nexus 6
+          emulator-boot-timeout: 1200
           disable-animations: true
           emulator-options: -no-snapshot -noaudio -no-boot-anim
           script: |
