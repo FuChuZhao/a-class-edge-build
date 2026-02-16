@@ -84,6 +84,14 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install emulator runtime deps
+        if: ${{ github.event.inputs.run_mlkit_benchmark == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libpulse0
+
       - name: Run benchmark evaluation
         if: ${{ github.event.inputs.run_benchmark == 'true' }}
         shell: bash
@@ -114,7 +122,7 @@ jobs:
           profile: Nexus 6
           emulator-boot-timeout: 1200
           disable-animations: true
-          emulator-options: -no-snapshot -noaudio -no-boot-anim
+          emulator-options: -no-snapshot -noaudio -no-boot-anim -no-window
           script: |
             set -euo pipefail
             cd source
@@ -144,14 +152,16 @@ jobs:
             adb pull "$DEVICE_ROOT/out" out/mlkit-benchmark/device || true
 
       - name: Upload artifact (minimal retention)
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.inputs.artifact_name }}
           path: source/out/apk/*.apk
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 1
 
       - name: Upload unit test report
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: a-class-edge-unit-test-report
@@ -160,7 +170,7 @@ jobs:
           retention-days: 1
 
       - name: Upload benchmark report
-        if: ${{ github.event.inputs.run_benchmark == 'true' }}
+        if: ${{ always() && github.event.inputs.run_benchmark == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: a-class-edge-benchmark-report
