@@ -73,7 +73,7 @@ jobs:
       - name: Upload unit test report
         uses: actions/upload-artifact@v4
         with:
-          name: unit-test-report
+          name: a-class-edge-unit-test-report
           path: source/out/test-report/**
           if-no-files-found: warn
           retention-days: 1
