@@ -124,32 +124,34 @@ jobs:
           disable-animations: true
           emulator-options: -no-snapshot -noaudio -no-boot-anim -no-window
           script: |
-            set -eu
-            cd source
-            chmod +x tool/benchmark/build_hf_benchmark_v1.sh
+            bash -lc '
+              set -euo pipefail
+              cd source
+              chmod +x tool/benchmark/build_hf_benchmark_v1.sh
 
-            if [[ "$RUN_BENCHMARK" != "true" ]]; then
-              tool/benchmark/build_hf_benchmark_v1.sh --download --per-class "$BENCHMARK_PER_CLASS" --out-dir out/benchmark
-            fi
+              if [[ "$RUN_BENCHMARK" != "true" ]]; then
+                tool/benchmark/build_hf_benchmark_v1.sh --download --per-class "$BENCHMARK_PER_CLASS" --out-dir out/benchmark
+              fi
 
-            python3 tool/benchmark/build_mlkit_eval_manifest.py \
-              --benchmark-manifest out/benchmark/benchmark_manifest.csv \
-              --output out/benchmark/mlkit_eval_manifest.json \
-              --max-samples "$MLKIT_MAX_SAMPLES"
+              python3 tool/benchmark/build_mlkit_eval_manifest.py \
+                --benchmark-manifest out/benchmark/benchmark_manifest.csv \
+                --output out/benchmark/mlkit_eval_manifest.json \
+                --max-samples "$MLKIT_MAX_SAMPLES"
 
-            DEVICE_ROOT="/sdcard/Android/data/com.okret.aclassedge.debug/files/okret_benchmark"
-            adb shell "rm -rf $DEVICE_ROOT && mkdir -p $DEVICE_ROOT"
-            adb push out/benchmark/images "$DEVICE_ROOT/images"
-            adb push out/benchmark/mlkit_eval_manifest.json "$DEVICE_ROOT/mlkit_eval_manifest.json"
+              DEVICE_ROOT="/sdcard/Android/data/com.okret.aclassedge.debug/files/okret_benchmark"
+              adb shell "rm -rf $DEVICE_ROOT && mkdir -p $DEVICE_ROOT"
+              adb push out/benchmark/images "$DEVICE_ROOT/images"
+              adb push out/benchmark/mlkit_eval_manifest.json "$DEVICE_ROOT/mlkit_eval_manifest.json"
 
-            ./gradlew --no-daemon :app:connectedDebugAndroidTest \
-              -Pandroid.testInstrumentationRunnerArguments.class=com.okret.aclassedge.benchmark.MlKitRouterBenchmarkInstrumentedTest \
-              -Pandroid.testInstrumentationRunnerArguments.okretBenchmarkManifest="$DEVICE_ROOT/mlkit_eval_manifest.json" \
-              -Pandroid.testInstrumentationRunnerArguments.okretBenchmarkImagesRoot="$DEVICE_ROOT" \
-              -Pandroid.testInstrumentationRunnerArguments.okretBenchmarkOutDir="$DEVICE_ROOT/out"
+              ./gradlew --no-daemon :app:connectedDebugAndroidTest \
+                -Pandroid.testInstrumentationRunnerArguments.class=com.okret.aclassedge.benchmark.MlKitRouterBenchmarkInstrumentedTest \
+                -Pandroid.testInstrumentationRunnerArguments.okretBenchmarkManifest="$DEVICE_ROOT/mlkit_eval_manifest.json" \
+                -Pandroid.testInstrumentationRunnerArguments.okretBenchmarkImagesRoot="$DEVICE_ROOT" \
+                -Pandroid.testInstrumentationRunnerArguments.okretBenchmarkOutDir="$DEVICE_ROOT/out"
 
-            mkdir -p out/mlkit-benchmark
-            adb pull "$DEVICE_ROOT/out" out/mlkit-benchmark/device || true
+              mkdir -p out/mlkit-benchmark
+              adb pull "$DEVICE_ROOT/out" out/mlkit-benchmark/device || true
+            '
 
       - name: Upload artifact (minimal retention)
         if: ${{ always() }}
